@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<robot name="kobuki">
+  <!-- Base Link (Cylinder) -->
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <cylinder length="0.12" radius="0.175"/>
+      </geometry>
+      <material name="black">
+        <color rgba="0.1 0.1 0.1 1"/>
+      </material>
+    </visual>
+  </link>
+
+  <!-- Camera Link (Kinect Box) -->
+  <link name="camera_link">
+    <visual>
+      <geometry>
+        <box size="0.06 0.28 0.04"/>
+      </geometry>
+      <material name="gray">
+        <color rgba="0.5 0.5 0.5 1"/>
+      </material>
+    </visual>
+  </link>
+
+  <!-- Joint: base_link to camera_link -->
+  <joint name="base_to_camera_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="camera_link"/>
+    <origin xyz="0.1 0 0.2" rpy="0 0 0"/>
+  </joint>
+</robot>
