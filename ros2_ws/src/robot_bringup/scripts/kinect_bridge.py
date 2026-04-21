@@ -20,12 +20,9 @@ import time
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy
-from sensor_msgs.msg import Image, CameraInfo, CompressedImage
+from sensor_msgs.msg import Image, CameraInfo
 from std_msgs.msg import Header
 import builtin_interfaces.msg
-import cv2
-from http.server import BaseHTTPRequestHandler, HTTPServer
-import io
 
 # ───────────── libfreenect ctypes bindings ────────────────────────────────────
 lib_path = ctypes.util.find_library("freenect")
@@ -49,41 +46,32 @@ FREENECT_DEPTH_REGISTERED = 2
 
 # Kinect v1 intrinsics (approximate, standard calibration)
 # These are for V1 (RGBcam 640x480 @30fps, depth 640x480)
-# These are for V1 (Downsampled to 320x240)
-RGB_FX   = 262.5
-RGB_FY   = 262.5
-RGB_CX   = 159.75
-RGB_CY   = 119.75
-DEPTH_FX = 262.5
-DEPTH_FY = 262.5
-DEPTH_CX = 159.75
-DEPTH_CY = 119.75
+RGB_FX   = 525.0
+RGB_FY   = 525.0
+RGB_CX   = 319.5
+RGB_CY   = 239.5
+DEPTH_FX = 525.0  # same after registration
+DEPTH_FY = 525.0
+DEPTH_CX = 319.5
+DEPTH_CY = 239.5
 # ─────────────────────────────────────────────────────────────────────────────
-DEPTH_OFFSET_MM = 0  # Standard offset (can be tuned via ROS parameters)
 
 
 class KinectBridgeNode(Node):
     def __init__(self):
         super().__init__('kinect_bridge')
-        self.get_logger().set_level(rclpy.logging.LoggingSeverity.DEBUG)
 
         qos = QoSProfile(depth=10)
-        qos_best_effort = QoSProfile(depth=1)
-        qos_best_effort.reliability = ReliabilityPolicy.BEST_EFFORT
-        
-        self.rgb_pub   = self.create_publisher(Image,           '/camera/color/image_raw',     qos)
-        self.rgb_comp  = self.create_publisher(CompressedImage, '/camera/color/image_raw/compressed', qos_best_effort)
-        self.depth_pub = self.create_publisher(Image,           '/camera/depth/image_raw',      qos)
-        self.rgb_info  = self.create_publisher(CameraInfo,      '/camera/color/camera_info',   qos)
-        self.depth_info= self.create_publisher(CameraInfo,      '/camera/depth/camera_info',   qos)
+        self.rgb_pub   = self.create_publisher(Image,      '/camera/color/image_raw',     qos)
+        self.depth_pub = self.create_publisher(Image,      '/camera/depth/image_raw',      qos)
+        self.rgb_info  = self.create_publisher(CameraInfo, '/camera/color/camera_info',   qos)
+        self.depth_info= self.create_publisher(CameraInfo, '/camera/depth/camera_info',   qos)
 
         self._lock     = threading.Lock()
         self._rgb_buf  = None
         self._dep_buf  = None
         self._running  = True
         self._ts       = 0
-
-        self.declare_parameter('depth_offset_mm', DEPTH_OFFSET_MM)
 
         # Try sync API first (simpler)
         if _fns:
@@ -93,48 +81,12 @@ class KinectBridgeNode(Node):
             self._use_sync = False
             self._init_async_freenect()
 
-        # Start MJPEG Web Server on port 5000
-        self._latest_jpeg = None
-        self._web_thread = threading.Thread(target=self._run_web_server, daemon=True)
-        self._web_thread.start()
-
-        # Start Grab Loop Thread
+        # Timer to publish frames at ~15 Hz
         self._grab_thread = threading.Thread(target=self._grab_loop, daemon=True)
         self._grab_thread.start()
+        self.create_timer(1.0/15.0, self._publish_latest)
 
-        # Start timer for publishing (to keep it decoupled from grab rate)
-        self.create_timer(1.0/30.0, self._publish_latest)
-
-        self.get_logger().info('✅ Kinect bridge started — publishing to /camera/ and web http://0.0.0.0:5000')
-
-    def _run_web_server(self):
-        class MJPEGHandler(BaseHTTPRequestHandler):
-            def do_GET(handler):
-                if handler.path == '/':
-                    handler.send_response(200)
-                    handler.send_header('Content-type', 'multipart/x-mixed-replace; boundary=frame')
-                    handler.end_headers()
-                    try:
-                        while True:
-                            with self._lock:
-                                jpeg = self._latest_jpeg
-                            if jpeg is not None:
-                                handler.wfile.write(b'--frame\r\n')
-                                handler.send_header('Content-type', 'image/jpeg')
-                                handler.send_header('Content-length', len(jpeg))
-                                handler.end_headers()
-                                handler.wfile.write(jpeg)
-                                handler.wfile.write(b'\r\n')
-                            time.sleep(0.05)
-                    except Exception as e: 
-                        self.get_logger().debug(f'Client disconnected: {e}')
-                        return
-                else:
-                    handler.send_error(404)
-            def log_message(self, format, *args): return # Silent
-
-        server = HTTPServer(('0.0.0.0', 5000), MJPEGHandler)
-        server.serve_forever()
+        self.get_logger().info('✅ Kinect bridge started — publishing RGB+depth to /camera/...')
 
     # ── Sync API (freenect_sync) ───────────────────────────────────────────────
     def _grab_loop(self):
@@ -161,17 +113,14 @@ class KinectBridgeNode(Node):
 
         while self._running:
             try:
-                self.get_logger().debug('Grabbing RGB frame...')
                 ret = _fns.freenect_sync_get_video(
                     ctypes.byref(rgb_ptr), ctypes.byref(ts), 0, FREENECT_VIDEO_RGB)
                 if ret == 0 and rgb_ptr.value:
                     arr = np.frombuffer(
                         (ctypes.c_uint8 * (640*480*3)).from_address(rgb_ptr.value),
-                        dtype=np.uint8).reshape((480, 640, 3))
-                    # Downsample to 320x240 (1/4 data)
-                    small_arr = arr[::2, ::2, :].copy()
+                        dtype=np.uint8).reshape((480, 640, 3)).copy()
                     with self._lock:
-                        self._rgb_buf = small_arr
+                        self._rgb_buf = arr
                         self._ts = ts.value
 
                 ret = _fns.freenect_sync_get_depth(
@@ -179,28 +128,19 @@ class KinectBridgeNode(Node):
                 if ret == 0 and dep_ptr.value:
                     raw = np.frombuffer(
                         (ctypes.c_uint16 * (640*480)).from_address(dep_ptr.value),
-                        dtype=np.uint16).reshape((480, 640))
-                    # Convert to mm
-                    offset = self.get_parameter('depth_offset_mm').value
-                    mm = self._raw_to_mm(raw, offset)
-                    # Downsample to 320x240
-                    small_dep = mm[::2, ::2].copy()
+                        dtype=np.uint16).reshape((480, 640)).copy()
+                    # Convert 11-bit raw → mm using standard formula
+                    mm = self._raw_to_mm(raw)
                     with self._lock:
-                        self._dep_buf = small_dep
+                        self._dep_buf = mm
             except Exception as e:
-                self.get_logger().warn(f'⚠️ Kinect Grab Error: {e}. Retrying in 1s...')
-                # Reset pointers if they were corrupted
-                rgb_ptr = ctypes.c_void_p()
-                dep_ptr = ctypes.c_void_p()
-                time.sleep(1.0)
+                self.get_logger().warn(f'Frame grab error: {e}')
+                time.sleep(0.1)
 
-    def _raw_to_mm(self, raw, offset=0):
-        """Convert Kinect 11-bit raw disparity to millimetres with calibration offset."""
+    def _raw_to_mm(self, raw):
+        """Convert Kinect 11-bit raw disparity to millimetres."""
         with np.errstate(divide='ignore', invalid='ignore'):
-            # Standard conversion formula for Kinect V1 disparity
             mm = np.where(raw > 0, (1.0 / (raw * -0.0030711016 + 3.3309495161)) * 1000.0, 0)
-            # Apply calibration offset (only where data is valid)
-            mm = np.where(mm > 0, mm + offset, 0)
         return mm.astype(np.uint16)
 
     # ── Async API fallback (libfreenect) ──────────────────────────────────────
@@ -214,7 +154,6 @@ class KinectBridgeNode(Node):
 
     # ── Publishing ─────────────────────────────────────────────────────────────
     def _publish_latest(self):
-        # self.get_logger().info('Publish timer ticked') # Too verbose, leave off for now
         with self._lock:
             rgb = self._rgb_buf
             dep = self._dep_buf
@@ -224,34 +163,7 @@ class KinectBridgeNode(Node):
         frame_id = 'camera_link'
 
         if rgb is not None:
-            # Publish raw image (for local use)
             self.rgb_pub.publish(self._to_image(rgb, 'rgb8', stamp, frame_id))
-            
-            # Publish compressed image (for WiFi/Laptop use)
-            try:
-                comp_msg = CompressedImage()
-                comp_msg.header.stamp = stamp
-                comp_msg.header.frame_id = frame_id
-                comp_msg.format = "jpeg"
-                # Encode RGB to JPEG (CV2 expects BGR for imencode)
-                bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
-                success, encoded_img = cv2.imencode(".jpg", bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
-                if success:
-                    comp_msg.data = encoded_img.tobytes()
-                    self.rgb_comp.publish(comp_msg)
-                    with self._lock:
-                        self._latest_jpeg = comp_msg.data
-                    
-                    # Heartbeat log every 100 frames (~3-5 seconds depending on FPS)
-                    if not hasattr(self, '_frame_count'): self._frame_count = 0
-                    self._frame_count += 1
-                    if self._frame_count % 100 == 0:
-                        self.get_logger().info('📡 Kinect Streaming: Heartbeat OK (100 frames processed)')
-                else:
-                    self.get_logger().error('❌ Kinect Error: JPEG encoding failed!')
-            except Exception as e:
-                self.get_logger().error(f'❌ Kinect Error: Compression failed: {e}')
-
             self.rgb_info.publish(self._camera_info(stamp, frame_id, RGB_FX, RGB_FY, RGB_CX, RGB_CY))
 
         if dep is not None:
@@ -274,8 +186,8 @@ class KinectBridgeNode(Node):
         msg = CameraInfo()
         msg.header.stamp    = stamp
         msg.header.frame_id = frame_id
-        msg.width  = 320
-        msg.height = 240
+        msg.width  = 640
+        msg.height = 480
         msg.distortion_model = 'plumb_bob'
         msg.d = [0.0, 0.0, 0.0, 0.0, 0.0]
         msg.k = [fx, 0.0, cx,  0.0, fy, cy,  0.0, 0.0, 1.0]

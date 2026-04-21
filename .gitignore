@@ -13,6 +13,17 @@ __pycache__/
 # OS
 .DS_Store
 
+# Document files (proposals, reports, guidelines)
+*.pdf
+*.txt
+*.md
+*.log
+*.gv
+
+# Shell scripts
+start_pi_services.sh
+start_system.sh
+
 
 
 

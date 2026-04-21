@@ -24,6 +24,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
+            'object_localization_node = object_localization.object_localization_node:main'
         ],
     },
+
 )
