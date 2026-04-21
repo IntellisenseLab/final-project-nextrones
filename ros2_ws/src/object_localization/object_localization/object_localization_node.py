@@ -92,15 +92,20 @@ class ObjectLocalizationNode(Node):
                 self.get_logger().warning(f'TF Transform failed: {e}')
 
 def main(args=None):
-    rclpy.init(args=args)
-    node = ObjectLocalizationNode()
     try:
-        rclpy.spin(node)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        node.destroy_node()
-        rclpy.shutdown()
+        rclpy.init(args=args)
+        node = ObjectLocalizationNode()
+        try:
+            rclpy.spin(node)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            node.destroy_node()
+            if rclpy.ok():
+                rclpy.shutdown()
+    except Exception as e:
+        print(f"❌ Critical Startup Error in Localization: {e}")
 
 if __name__ == '__main__':
     main()
+

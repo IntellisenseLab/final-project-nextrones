@@ -24,6 +24,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
+            'nav_goal_sender_node = nav_goal_sender.nav_goal_sender_node:main'
         ],
     },
 )

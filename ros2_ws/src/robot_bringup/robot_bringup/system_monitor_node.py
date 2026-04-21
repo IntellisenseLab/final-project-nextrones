@@ -5,28 +5,33 @@ from sensor_msgs.msg import Image, CompressedImage, LaserScan
 from semantic_msgs.msg import DetectionArray
 from geometry_msgs.msg import Twist
 import time
+import subprocess
+import os
 
 class SystemMonitorNode(Node):
+
     def __init__(self):
         super().__init__('system_monitor_node')
         
         # Topic tracking (Topic Name -> [Last Message Time, Total Count])
         self.topics = {
-            '/camera/color/image_raw/compressed': [0.0, 0],
-            '/detections': [0.0, 0],
+            '/camera/color/image_raw': [0.0, 0],
+            '/yolo_detections': [0.0, 0],
             '/scan': [0.0, 0],
             '/cmd_vel': [0.0, 0]
         }
+
         
         # Subscriptions
-        self.create_subscription(CompressedImage, '/camera/color/image_raw/compressed', 
-                                 lambda msg: self.topic_callback('/camera/color/image_raw/compressed'), 10)
-        self.create_subscription(DetectionArray, '/detections', 
-                                 lambda msg: self.topic_callback('/detections'), 10)
+        self.create_subscription(Image, '/camera/color/image_raw', 
+                                 lambda msg: self.topic_callback('/camera/color/image_raw'), 10)
+        self.create_subscription(DetectionArray, '/yolo_detections', 
+                                 lambda msg: self.topic_callback('/yolo_detections'), 10)
         self.create_subscription(LaserScan, '/scan', 
                                  lambda msg: self.topic_callback('/scan'), 10)
         self.create_subscription(Twist, '/cmd_vel', 
                                  lambda msg: self.topic_callback('/cmd_vel'), 10)
+
         
         # Periodic Status Print (Every 5 seconds)
         self.timer = self.create_timer(5.0, self.print_status)
@@ -37,13 +42,40 @@ class SystemMonitorNode(Node):
         self.topics[topic_name][0] = time.time()
         self.topics[topic_name][1] += 1
 
+    def check_throttling(self):
+        try:
+            # vcgencmd get_throttled returns 'throttled=0x50000'
+            output = subprocess.check_output(['vcgencmd', 'get_throttled']).decode('utf-8')
+            hex_val = int(output.split('=')[1], 16)
+            
+            reasons = []
+            if hex_val & 0x00001: reasons.append('Under-voltage detected')
+            if hex_val & 0x00002: reasons.append('Arm frequency capped')
+            if hex_val & 0x00004: reasons.append('Currently throttled')
+            if hex_val & 0x00008: reasons.append('Soft temperature limit active')
+            if hex_val & 0x10000: reasons.append('Under-voltage HAS OCCURRED')
+            if hex_val & 0x20000: reasons.append('Arm frequency capped HAS OCCURRED')
+            if hex_val & 0x40000: reasons.append('Throttling HAS OCCURRED')
+            if hex_val & 0x80000: reasons.append('Soft temperature limit HAS OCCURRED')
+            
+            if not reasons:
+                return '✅ Power/Thermal: Stable'
+            else:
+                return '⚠️ Throttling: ' + ', '.join(reasons)
+        except Exception:
+            return '❓ Power/Thermal: Check Failed (Non-Pi hardware?)'
+
     def print_status(self):
         now = time.time()
+        throttle_msg = self.check_throttling()
         self.get_logger().info('--- 📊 SYSTEM HEALTH REPORT ---')
+        self.get_logger().info(throttle_msg)
+
         
         # Check Pi/Hardware Connection
-        pi_active = (now - self.topics['/camera/color/image_raw/compressed'][0] < 2.0 or 
+        pi_active = (now - self.topics['/camera/color/image_raw'][0] < 2.0 or 
                      now - self.topics['/scan'][0] < 2.0)
+
         
         status_icon = '✅' if pi_active else '❌'
         status_msg = 'Hardware Connected & Streaming' if pi_active else 'Hardware Disconnected or Idle'

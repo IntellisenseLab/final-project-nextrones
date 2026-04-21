@@ -181,15 +181,21 @@ class KobukiDriverNode(Node):
 
                 # Parse sub-payloads
                 idx = 0
-                while idx < len(payload):
+                while idx + 1 < len(payload):
                     sub_id = payload[idx]
                     sub_len = payload[idx+1]
+                    
+                    # Guard against malformed sub-payload lengths
+                    if idx + 2 + sub_len > len(payload):
+                        break
+                        
                     sub_data = payload[idx+2 : idx+2+sub_len]
                     
                     if sub_id == 0x01: # Basic Sensor Data
                         self._handle_sensor_data(sub_data)
                     
                     idx += 2 + sub_len
+
 
             except Exception as e:
                 self.get_logger().error(f'Read loop error: {e}')

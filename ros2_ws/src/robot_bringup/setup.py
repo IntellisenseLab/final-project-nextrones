@@ -41,6 +41,8 @@ setup(
             'task_manager = robot_bringup.task_manager_node:main',
             'cmd_vel_test = robot_bringup.cmd_vel_test:main',
             'system_monitor = robot_bringup.system_monitor_node:main',
+            'visual_tracker = robot_bringup.visual_tracker_node:main',
         ],
+
     },
 )

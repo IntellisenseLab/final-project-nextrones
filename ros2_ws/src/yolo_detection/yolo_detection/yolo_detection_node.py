@@ -7,6 +7,7 @@ import numpy as np
 import cv2
 from ultralytics import YOLO
 import time
+import os
 from semantic_msgs.msg import Detection, DetectionArray
 
 class YoloDetectionNode(Node):
@@ -17,10 +18,11 @@ class YoloDetectionNode(Node):
         qos.reliability = ReliabilityPolicy.BEST_EFFORT
 
         self.subscription = self.create_subscription(
-            CompressedImage,
-            '/camera/color/image_raw/compressed',
+            Image,
+            '/camera/color/image_raw',
             self.image_callback,
             qos)
+
         self.bridge = CvBridge()
         
         # Parameters
@@ -35,11 +37,16 @@ class YoloDetectionNode(Node):
         self.model = YOLO(model_path)
         
         self.last_inference_time = 0
-        self.inference_interval = 1.0 / 10.0  # Limit to 10 FPS
+        self.inference_interval = 0.0  # Fully unlocked for maximum Pi 5 performance
+
+
         
         self.get_logger().info('✅ YOLOv8 Detection Node Started')
         
-        self.publisher = self.create_publisher(DetectionArray, '/detections', 10)
+        self.publisher = self.create_publisher(DetectionArray, '/yolo_detections', 10)
+        self.debug_img_pub = self.create_publisher(CompressedImage, '/yolo_debug/image/compressed', qos)
+        self.debug_small_pub = self.create_publisher(Image, '/yolo_debug/image/small', qos)
+
 
     def image_callback(self, msg):
         current_time = time.time()
@@ -54,20 +61,20 @@ class YoloDetectionNode(Node):
         if self._frame_count % 50 == 0:
             self.get_logger().info(f'🖼️ YOLO: Frame sync OK ({self._frame_count} frames received from Pi)')
         
-        # Convert ROS CompressedImage to OpenCV format
+        # Convert ROS Image to OpenCV format
         try:
-            np_arr = np.frombuffer(msg.data, np.uint8)
-            cv_image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+            cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
         except Exception as e:
-            self.get_logger().error(f'Failed to decode image: {e}')
+            self.get_logger().error(f'Failed to convert image: {e}')
             return
+
         
         if cv_image is None:
             return
         
-        # Run YOLO inference
+        # Run YOLO inference (Optimized for speed with imgsz=320)
         try:
-            results = self.model(cv_image, verbose=False, stream=True)
+            results = self.model(cv_image, verbose=False, stream=True, imgsz=320)
             
             detection_array = DetectionArray()
             detection_array.header = msg.header
@@ -76,8 +83,9 @@ class YoloDetectionNode(Node):
                 for box in r.boxes:
                     # Filter by confidence
                     conf = float(box.conf[0])
-                    if conf < 0.5:
+                    if conf < 0.3:
                         continue
+
                         
                     # Get coordinates
                     x1, y1, x2, y2 = box.xyxy[0].tolist()
@@ -110,7 +118,7 @@ class YoloDetectionNode(Node):
                 self.publisher.publish(detection_array)
             
             # Visualization
-            if self.debug_view:
+            if self.debug_view or True: # Always publish to topic for RViz
                 # Draw detections on image
                 for det in detection_array.detections:
                     u, v = int(det.position.x), int(det.position.y)
@@ -123,23 +131,53 @@ class YoloDetectionNode(Node):
                     cv2.putText(cv_image, f"{det.label} {det.confidence:.2f}", (x1, y1 - 10),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
                 
-                cv2.imshow('YOLOv8 Detection View', cv_image)
-                cv2.waitKey(1)
+                # 🔹 Publish optimized streams for PC Viewing
+                try:
+                    # 1. Compressed Stream (Optimized for maximum FPS)
+                    success, buffer = cv2.imencode('.jpg', cv_image, [cv2.IMWRITE_JPEG_QUALITY, 40])
+                    if success:
+
+                        compressed_msg = CompressedImage()
+                        compressed_msg.header = msg.header
+                        compressed_msg.format = "jpeg"
+                        compressed_msg.data = np.array(buffer).tobytes()
+                        self.debug_img_pub.publish(compressed_msg)
+                    
+                    # 2. Universal Small Stream (Works WITHOUT plugins on any PC)
+                    small_frame = cv2.resize(cv_image, (320, 240))
+                    small_msg = self.bridge.cv2_to_imgmsg(small_frame, encoding="bgr8")
+                    small_msg.header = msg.header
+                    self.debug_small_pub.publish(small_msg)
+
+                except Exception as e:
+                    self.get_logger().error(f"Failed to publish debug images: {e}")
+
+                # Optional local display
+                if self.debug_view and os.environ.get('DISPLAY'):
+                    cv2.imshow('YOLOv8 Detection View', cv_image)
+                    cv2.waitKey(1)
+
+
 
         except Exception as e:
             self.get_logger().error(f'❌ YOLO Inference Error: {e}')
 
 
 def main(args=None):
-    rclpy.init(args=args)
-    node = YoloDetectionNode()
     try:
-        rclpy.spin(node)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        node.destroy_node()
-        rclpy.shutdown()
+        rclpy.init(args=args)
+        node = YoloDetectionNode()
+        try:
+            rclpy.spin(node)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            node.destroy_node()
+            if rclpy.ok():
+                rclpy.shutdown()
+    except Exception as e:
+        print(f"❌ Critical Startup Error: {e}")
 
 if __name__ == '__main__':
     main()
+
