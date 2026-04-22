@@ -16,6 +16,7 @@ __pycache__/
 # Document files (proposals, reports, guidelines)
 *.pdf
 *.txt
+!CMakeLists.txt
 *.md
 *.log
 *.gv
