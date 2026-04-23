@@ -63,12 +63,12 @@ def generate_launch_description():
             }]
         ),
 
-        # 4. SLAM & Navigation (All Local to Pi)
+        # 4. SLAM Stack
         Node(
             package='slam_toolbox',
             executable='async_slam_toolbox_node',
             name='slam_toolbox',
-            parameters=[os.path.join(pkg_bringup, 'config', 'navigation_params.yaml'), {'use_sim_time': False}],
+            parameters=[os.path.join(pkg_bringup, 'config', 'mapper_params_online_async.yaml'), {'use_sim_time': False}],
             output='screen'
         ),
         IncludeLaunchDescription(
