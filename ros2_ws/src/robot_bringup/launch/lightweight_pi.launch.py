@@ -54,8 +54,11 @@ def generate_launch_description():
             package='depthimage_to_laserscan',
             executable='depthimage_to_laserscan_node',
             name='depthimage_to_laserscan',
-            remappings=[('image', '/camera/depth/image_raw'),
-                        ('camera_info', '/camera/depth/camera_info')],
+            remappings=[
+                ('depth/image_raw', '/camera/depth/image_raw'),
+                ('depth/camera_info', '/camera/depth/camera_info'),
+                ('scan', '/scan')
+            ],
             parameters=[{
                 'output_frame': 'camera_depth_optical_frame', 
                 'range_min': 0.45,
