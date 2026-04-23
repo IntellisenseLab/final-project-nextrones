@@ -6,13 +6,10 @@
       </Interfaces>
     </General>
     <Discovery>
-      <Peers>
-        <!-- Raspberry Pi IP -->
-        <Peer address="172.20.10.2"/>
-        <!-- Laptop IP -->
-        <Peer address="172.20.10.3"/>
-      </Peers>
-      <ParticipantIndex>auto</ParticipantIndex>
+      <ParticipantIndex>none</ParticipantIndex>
     </Discovery>
+    <Internal>
+      <MaxParticipants>256</MaxParticipants>
+    </Internal>
   </Domain>
 </CycloneDDS>
