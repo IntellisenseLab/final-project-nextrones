@@ -77,7 +77,7 @@ def generate_launch_description():
             launch_arguments={
                 'use_sim_time': 'false',
                 'params_file': os.path.join(pkg_bringup, 'config', 'navigation_params.yaml'),
-                'autostart': 'true'
+                'autostart': 'true',
             }.items()
         ),
 
