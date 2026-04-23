@@ -63,7 +63,24 @@ def generate_launch_description():
             }]
         ),
 
-        # 4. Zero-Stream Perception (Direct Script Execution)
+        # 4. SLAM & Navigation (All Local to Pi)
+        Node(
+            package='slam_toolbox',
+            executable='async_slam_toolbox_node',
+            name='slam_toolbox',
+            parameters=[os.path.join(pkg_bringup, 'config', 'navigation_params.yaml'), {'use_sim_time': False}],
+            output='screen'
+        ),
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource([os.path.join(pkg_nav2, 'launch', 'navigation_launch.py')]),
+            launch_arguments={
+                'use_sim_time': 'false',
+                'params_file': os.path.join(pkg_bringup, 'config', 'navigation_params.yaml'),
+                'autostart': 'true'
+            }.items()
+        ),
+
+        # 5. Zero-Stream Perception (Direct Script Execution)
         Node(
             package='yolo_detection',
             executable='/usr/bin/bash',
@@ -78,7 +95,7 @@ def generate_launch_description():
             output='screen'
         ),
 
-        # 5. Semantic Localization (Locally on Pi to keep vision data local)
+        # 6. Semantic Pipeline (Local)
         Node(
             package='object_localization',
             executable='object_localization_node',
@@ -88,5 +105,11 @@ def generate_launch_description():
             package='semantic_map',
             executable='semantic_map_node',
             name='semantic_map_node'
+        ),
+        Node(
+            package='nav_goal_sender',
+            executable='nav_goal_sender_node',
+            name='nav_goal_sender',
+            parameters=[{'target_object': LaunchConfiguration('target_object')}]
         )
     ])
