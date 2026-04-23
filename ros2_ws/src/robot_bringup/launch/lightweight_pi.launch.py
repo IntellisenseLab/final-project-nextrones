@@ -48,7 +48,7 @@ def generate_launch_description():
             output='screen'
         ),
 
-        # 3. 2D SLAM Stack (Depth to Laser Scan)
+        # 3. 2D Sensor Stack (Depth to Laser Scan)
         Node(
             package='depthimage_to_laserscan',
             executable='depthimage_to_laserscan_node',
@@ -62,15 +62,8 @@ def generate_launch_description():
                 'scan_height': 10
             }]
         ),
-        Node(
-            package='slam_toolbox',
-            executable='async_slam_toolbox_node',
-            name='slam_toolbox',
-            parameters=[mapper_params, {'use_sim_time': False}],
-            output='screen'
-        ),
 
-        # 4. Zero-Stream Perception (Direct Script Execution to avoid PackageNotFoundError)
+        # 4. Zero-Stream Perception (Direct Script Execution)
         Node(
             package='yolo_detection',
             executable='/usr/bin/bash',
@@ -85,7 +78,7 @@ def generate_launch_description():
             output='screen'
         ),
 
-        # 5. Semantic Pipeline (Locally on Pi)
+        # 5. Semantic Localization (Locally on Pi to keep vision data local)
         Node(
             package='object_localization',
             executable='object_localization_node',
@@ -95,11 +88,5 @@ def generate_launch_description():
             package='semantic_map',
             executable='semantic_map_node',
             name='semantic_map_node'
-        ),
-        Node(
-            package='nav_goal_sender',
-            executable='nav_goal_sender_node',
-            name='nav_goal_sender',
-            parameters=[{'target_object': LaunchConfiguration('target_object')}]
         )
     ])

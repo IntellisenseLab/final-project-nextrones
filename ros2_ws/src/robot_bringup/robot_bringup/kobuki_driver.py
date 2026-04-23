@@ -145,11 +145,13 @@ class KobukiDriverNode(Node):
         try:
             speed_mms, radius_mm = twist_to_speed_radius(msg.linear.x, msg.angular.z)
             packet = make_base_control_payload(speed_mms, radius_mm)
-            self.get_logger().info(f'Received cmd_vel: lin={msg.linear.x:.2f}, ang={msg.angular.z:.2f} -> speed={speed_mms}, rad={radius_mm}')
-            if self.connected and self.serial:
+            
+            # Log command (limiting frequency would be better, but let's keep it simple for now)
+            self.get_logger().info(f'📥 CMD_VEL: {msg.linear.x:.2f}m/s, {msg.angular.z:.2f}rad/s → speed={speed_mms}, rad={radius_mm}')
+            
+            if self.connected and self.serial and self.serial.is_open:
                 try:
                     self.serial.write(packet)
-                    self.get_logger().info('Sent packet to serial.')
                 except serial.SerialException as e:
                     self.get_logger().error(f'❌ [Kobuki] Serial write error: {e}')
         except Exception as e:
@@ -159,6 +161,10 @@ class KobukiDriverNode(Node):
         """Read and parse feedback packets from Kobuki."""
         while not self._stop_event.is_set() and self.connected:
             try:
+                if not self.serial or not self.serial.is_open:
+                    time.sleep(0.1)
+                    continue
+
                 # Find Header 0xAA 0x55
                 b = self.serial.read(1)
                 if not b or b[0] != 0xAA: continue
