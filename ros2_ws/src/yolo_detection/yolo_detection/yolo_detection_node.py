@@ -26,24 +26,26 @@ class YoloDetectionNode(Node):
         self.bridge = CvBridge()
         
         # Parameters
-        self.declare_parameter('model_path', '/home/hasini/yolov8n.pt')
-        self.declare_parameter('debug_view', True)
+        self.declare_parameter('model_path', 'yolov8n.pt')
+        self.declare_parameter('debug_view', False)
+        self.declare_parameter('publish_debug', False)  # Disable WiFi bandwidth-heavy images
+        self.declare_parameter('inference_fps', 2.0)  # Throttled for Pi 5 performance
         
         model_path = self.get_parameter('model_path').get_parameter_value().string_value
         self.debug_view = self.get_parameter('debug_view').get_parameter_value().bool_value
+        self.publish_debug = self.get_parameter('publish_debug').get_parameter_value().bool_value
+        self.inference_fps = self.get_parameter('inference_fps').get_parameter_value().double_value
         
         # Load YOLOv8n model
         self.get_logger().info(f'Loading YOLO model from {model_path}...')
         self.model = YOLO(model_path)
         
         self.last_inference_time = 0
-        self.inference_interval = 0.0  # Fully unlocked for maximum Pi 5 performance
+        self.inference_interval = 1.0 / self.inference_fps if self.inference_fps > 0 else 0.0
 
-
+        self.get_logger().info(f'✅ YOLOv8 Detection Node Started (FPS: {self.inference_fps})')
         
-        self.get_logger().info('✅ YOLOv8 Detection Node Started')
-        
-        self.publisher = self.create_publisher(DetectionArray, '/yolo_detections', 10)
+        self.publisher = self.create_publisher(DetectionArray, '/detections', 10)
         self.debug_img_pub = self.create_publisher(CompressedImage, '/yolo_debug/image/compressed', qos)
         self.debug_small_pub = self.create_publisher(Image, '/yolo_debug/image/small', qos)
 
@@ -55,11 +57,11 @@ class YoloDetectionNode(Node):
             
         self.last_inference_time = current_time
         
-        # Log frame arrival (Nature-style tracking)
+        # Log frame arrival
         if not hasattr(self, '_frame_count'): self._frame_count = 0
         self._frame_count += 1
         if self._frame_count % 50 == 0:
-            self.get_logger().info(f'🖼️ YOLO: Frame sync OK ({self._frame_count} frames received from Pi)')
+            self.get_logger().info(f'🖼️ YOLO: Frame sync OK ({self._frame_count} frames received)')
         
         # Convert ROS Image to OpenCV format
         try:
@@ -131,12 +133,12 @@ class YoloDetectionNode(Node):
                     cv2.putText(cv_image, f"{det.label} {det.confidence:.2f}", (x1, y1 - 10),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
                 
-                # 🔹 Publish optimized streams for PC Viewing
+            # 🔹 Publish optimized streams for PC Viewing (Disabled by default on Pi for bandwidth)
+            if self.publish_debug:
                 try:
                     # 1. Compressed Stream (Optimized for maximum FPS)
                     success, buffer = cv2.imencode('.jpg', cv_image, [cv2.IMWRITE_JPEG_QUALITY, 40])
                     if success:
-
                         compressed_msg = CompressedImage()
                         compressed_msg.header = msg.header
                         compressed_msg.format = "jpeg"

@@ -33,29 +33,42 @@ class NavGoalSenderNode(Node):
         self.get_logger().info(f'✅ Nav Goal Sender Node Started. Current Target: {self.target_object}')
 
     def object_callback(self, msg):
-        label = msg.label
-        
-        if label.lower() == self.target_object.lower():
-            current_time = time.time()
-            
-            # Cooldown logic to prevent overwhelming Nav2
-            if current_time - self.last_goal_sent_time > self.goal_cooldown:
-                self.get_logger().info(f'🎯 Target found: {label}. Sending goal to Nav2!')
+        try:
+            label = msg.label
+            if not label:
+                return
+
+            if label.lower() == self.target_object.lower():
+                current_time = time.time()
                 
-                goal_msg = PoseStamped()
-                goal_msg.header.stamp = self.get_clock().now().to_msg()
-                goal_msg.header.frame_id = 'map'
-                
-                # Use the localized 3D position
-                goal_msg.pose.position = msg.position
-                
-                # Orientation is neutral for now (robot faces "forward" as defined by the path)
-                goal_msg.pose.orientation.w = 1.0
-                
-                self.goal_pub.publish(goal_msg)
-                self.last_goal_sent_time = current_time
-            else:
-                self.get_logger().info(f'📍 Target {label} updated, but in cooldown.')
+                # Cooldown logic to prevent overwhelming Nav2
+                if current_time - self.last_goal_sent_time > self.goal_cooldown:
+                    try:
+                        self.get_logger().info(f'🎯 Target found: {label}. Sending goal to Nav2!')
+                        
+                        goal_msg = PoseStamped()
+                        goal_msg.header.stamp = self.get_clock().now().to_msg()
+                        goal_msg.header.frame_id = 'map'
+                        
+                        # Use the localized 3D position
+                        goal_msg.pose.position = msg.position
+                        
+                        # Safety check: Ensure position is valid
+                        if abs(msg.position.x) > 100 or abs(msg.position.y) > 100: # Sanity check for drift
+                            self.get_logger().warn(f'⚠️ [NavGoal] Rejecting suspicious goal coordinates: ({msg.position.x}, {msg.position.y})')
+                            return
+
+                        # Orientation is neutral for now
+                        goal_msg.pose.orientation.w = 1.0
+                        
+                        self.goal_pub.publish(goal_msg)
+                        self.last_goal_sent_time = current_time
+                    except Exception as e:
+                        self.get_logger().error(f'❌ [NavGoal] Failed to publish goal: {e}')
+                else:
+                    self.get_logger().debug(f'📍 Target {label} updated, but in cooldown.')
+        except Exception as e:
+            self.get_logger().error(f'❌ [NavGoal] Callback error: {e}')
 
 def main(args=None):
     rclpy.init(args=args)

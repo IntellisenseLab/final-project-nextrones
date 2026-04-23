@@ -38,7 +38,10 @@ class ObjectLocalizationNode(Node):
         self.get_logger().info('✅ Object Localization Node Started (with TF support)')
 
     def info_callback(self, msg):
-        self.intrinsics = [msg.k[0], msg.k[4], msg.k[2], msg.k[5]]
+        try:
+            self.intrinsics = [msg.k[0], msg.k[4], msg.k[2], msg.k[5]]
+        except Exception as e:
+            self.get_logger().error(f'❌ Localization Error: CameraInfo processing failed: {e}')
 
     def depth_callback(self, msg):
         try:
@@ -48,48 +51,65 @@ class ObjectLocalizationNode(Node):
             self.get_logger().error(f'Failed to process depth image: {e}')
 
     def detection_callback(self, msg):
-        if self.latest_depth is None or self.intrinsics is None:
-            return
+        try:
+            if self.latest_depth is None or self.intrinsics is None:
+                return
 
-        fx, fy, cx, cy = self.intrinsics
-        
-        for detection in msg.detections:
-            u, v = int(detection.position.x), int(detection.position.y)
+            fx, fy, cx, cy = self.intrinsics
             
-            if u < 0 or u >= self.latest_depth.shape[1] or v < 0 or v >= self.latest_depth.shape[0]:
-                continue
-                
-            z_mm = self.latest_depth[v, u]
-            if z_mm == 0 or z_mm > 5000:
-                continue
-                
-            z = float(z_mm) / 1000.0
-            x = (u - cx) * z / fx
-            y = (v - cy) * z / fy
-            
-            # Create a PointStamped in the camera's optical frame
-            p_cam = PointStamped()
-            p_cam.header = msg.header
-            p_cam.point.x = x
-            p_cam.point.y = y
-            p_cam.point.z = z
-            
-            try:
-                # Transform to 'map' frame as per proposal
-                # We wait briefly for the transform to be available
-                p_map = self.tf_buffer.transform(p_cam, 'map', timeout=rclpy.duration.Duration(seconds=0.1))
-                
-                # Create final Detection message for the semantic map
-                out_msg = Detection()
-                out_msg.label = detection.label
-                out_msg.confidence = detection.confidence
-                out_msg.position = p_map.point # 3D position in map frame
-                
-                self.get_logger().info(f'Localized {detection.label} in MAP frame at ({p_map.point.x:.2f}, {p_map.point.y:.2f})')
-                self.location_pub.publish(out_msg)
-                
-            except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException) as e:
-                self.get_logger().warning(f'TF Transform failed: {e}')
+            for detection in msg.detections:
+                try:
+                    u, v = int(detection.position.x), int(detection.position.y)
+                    
+                    if u < 0 or u >= self.latest_depth.shape[1] or v < 0 or v >= self.latest_depth.shape[0]:
+                        continue
+                        
+                    # Depth sampling with 3x3 window for robustness
+                    u_min = max(0, u - 1)
+                    u_max = min(self.latest_depth.shape[1], u + 2)
+                    v_min = max(0, v - 1)
+                    v_max = min(self.latest_depth.shape[0], v + 2)
+                    
+                    depth_roi = self.latest_depth[v_min:v_max, u_min:u_max]
+                    valid_depths = depth_roi[depth_roi > 0]
+                    
+                    if len(valid_depths) == 0:
+                        continue
+                        
+                    z_mm = np.median(valid_depths)
+                    if z_mm > 5000: # Max range
+                        continue
+                        
+                    z = float(z_mm) / 1000.0
+                    x = (u - cx) * z / fx
+                    y = (v - cy) * z / fy
+                    
+                    # Create a PointStamped in the camera's optical frame
+                    p_cam = PointStamped()
+                    p_cam.header = msg.header
+                    p_cam.point.x = x
+                    p_cam.point.y = y
+                    p_cam.point.z = z
+                    
+                    # Transform to 'map' frame
+                    try:
+                        p_map = self.tf_buffer.transform(p_cam, 'map', timeout=rclpy.duration.Duration(seconds=0.1))
+                        
+                        # Create final Detection message for the semantic map
+                        out_msg = Detection()
+                        out_msg.label = detection.label
+                        out_msg.confidence = detection.confidence
+                        out_msg.position = p_map.point # 3D position in map frame
+                        
+                        self.get_logger().info(f'✅ [Localization] {detection.label} at ({p_map.point.x:.2f}, {p_map.point.y:.2f})')
+                        self.location_pub.publish(out_msg)
+                        
+                    except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException) as e:
+                        self.get_logger().warning(f'⚠️ [Localization] TF Transform failed for {detection.label}: {e}')
+                except Exception as e:
+                    self.get_logger().error(f'❌ [Localization] Error processing detection {detection.label}: {e}')
+        except Exception as e:
+            self.get_logger().error(f'❌ [Localization] Critical callback error: {e}')
 
 def main(args=None):
     try:

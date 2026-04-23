@@ -96,15 +96,29 @@ class KobukiDriverNode(Node):
     def cmd_vel_cb(self, msg: Twist):
         speed_mms, radius_mm = twist_to_speed_radius(msg.linear.x, msg.angular.z)
         packet = make_base_control_payload(speed_mms, radius_mm)
-        self.get_logger().info(
-            f'CMD_VEL → speed={speed_mms}mm/s radius={radius_mm}mm | '
-            f'pkt={packet.hex()}'
-        )
-        if self.connected and self.serial:
+        # Throttled logging
+        if not hasattr(self, '_cmd_count'): self._cmd_count = 0
+        self._cmd_count += 1
+        if self._cmd_count % 20 == 0:
+            self.get_logger().info(
+                f'CMD_VEL ({self._cmd_count}) → speed={speed_mms}mm/s radius={radius_mm}mm'
+            )
+        if self.connected and self.serial and self.serial.is_open:
             try:
                 self.serial.write(packet)
             except serial.SerialException as e:
                 self.get_logger().error(f'Serial write error: {e}')
+
+    def _read_loop(self):
+        while rclpy.ok() and self.connected:
+            try:
+                if not self.serial or not self.serial.is_open:
+                    time.sleep(0.1)
+                    continue
+                # Read header
+                header = self.serial.read(2)
+            except Exception:
+                pass
 
     def destroy_node(self):
         if self.serial and self.serial.is_open:

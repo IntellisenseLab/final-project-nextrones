@@ -1,13 +1,31 @@
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription
+from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 def generate_launch_description():
+    target_object_arg = DeclareLaunchArgument(
+        'target_object',
+        default_value='bottle',
+        description='Target object for semantic navigation'
+    )
+    
+    use_rviz_arg = DeclareLaunchArgument(
+        'rviz',
+        default_value='true',
+        description='Whether to launch RViz'
+    )
+    
+    target_object = LaunchConfiguration('target_object')
+    use_rviz = LaunchConfiguration('rviz')
+
     # Paths
     bringup_dir = get_package_share_directory('robot_bringup')
+    rviz_config_path = os.path.join(bringup_dir, 'config', 'semantic_navigation.rviz')
     
     # Parameters
     # Using nav2_params.yaml from robot_bringup/config instead of the missing my_robot_controller
@@ -55,10 +73,23 @@ def generate_launch_description():
         package='nav_goal_sender',
         executable='nav_goal_sender_node',
         name='nav_goal_sender_node',
-        parameters=[{'target_object': 'bottle'}]
+        parameters=[{'target_object': target_object}]
+    )
+
+    # 4. Visualization
+    rviz_node = Node(
+        package='rviz2',
+        executable='rviz2',
+        name='rviz2',
+        arguments=['-d', rviz_config_path],
+        condition=IfCondition(use_rviz)
     )
 
     return LaunchDescription([
+        # Arguments
+        target_object_arg,
+        use_rviz_arg,
+
         # Hardware & Navigation
         kobuki_launch,
         nav2_launch,
@@ -67,5 +98,8 @@ def generate_launch_description():
         yolo_node,
         localization_node,
         semantic_map_node,
-        nav_goal_sender_node
+        nav_goal_sender_node,
+
+        # RViz
+        rviz_node
     ])

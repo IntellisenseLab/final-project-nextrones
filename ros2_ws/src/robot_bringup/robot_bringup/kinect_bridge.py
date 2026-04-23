@@ -165,28 +165,34 @@ class KinectBridgeNode(Node):
                 ret = _fns.freenect_sync_get_video(
                     ctypes.byref(rgb_ptr), ctypes.byref(ts), 0, FREENECT_VIDEO_RGB)
                 if ret == 0 and rgb_ptr.value:
-                    arr = np.frombuffer(
-                        (ctypes.c_uint8 * (640*480*3)).from_address(rgb_ptr.value),
-                        dtype=np.uint8).reshape((480, 640, 3))
-                    # Downsample to 320x240 (1/4 data)
-                    small_arr = arr[::2, ::2, :].copy()
-                    with self._lock:
-                        self._rgb_buf = small_arr
-                        self._ts = ts.value
+                    try:
+                        arr = np.frombuffer(
+                            (ctypes.c_uint8 * (640*480*3)).from_address(rgb_ptr.value),
+                            dtype=np.uint8).reshape((480, 640, 3))
+                        # Downsample to 320x240 (1/4 data)
+                        small_arr = arr[::2, ::2, :].copy()
+                        with self._lock:
+                            self._rgb_buf = small_arr
+                            self._ts = ts.value
+                    except Exception as e:
+                        self.get_logger().error(f'❌ Kinect Error: RGB buffer processing failed: {e}')
 
                 ret = _fns.freenect_sync_get_depth(
                     ctypes.byref(dep_ptr), ctypes.byref(ts), 0, FREENECT_DEPTH_11BIT)
                 if ret == 0 and dep_ptr.value:
-                    raw = np.frombuffer(
-                        (ctypes.c_uint16 * (640*480)).from_address(dep_ptr.value),
-                        dtype=np.uint16).reshape((480, 640))
-                    # Convert to mm
-                    offset = self.get_parameter('depth_offset_mm').value
-                    mm = self._raw_to_mm(raw, offset)
-                    # Downsample to 320x240
-                    small_dep = mm[::2, ::2].copy()
-                    with self._lock:
-                        self._dep_buf = small_dep
+                    try:
+                        raw = np.frombuffer(
+                            (ctypes.c_uint16 * (640*480)).from_address(dep_ptr.value),
+                            dtype=np.uint16).reshape((480, 640))
+                        # Convert to mm
+                        offset = self.get_parameter('depth_offset_mm').value
+                        mm = self._raw_to_mm(raw, offset)
+                        # Downsample to 320x240
+                        small_dep = mm[::2, ::2].copy()
+                        with self._lock:
+                            self._dep_buf = small_dep
+                    except Exception as e:
+                        self.get_logger().error(f'❌ Kinect Error: Depth buffer processing failed: {e}')
             except Exception as e:
                 self.get_logger().warn(f'⚠️ Kinect Grab Error: {e}. Retrying in 1s...')
                 # Reset pointers if they were corrupted
@@ -224,39 +230,44 @@ class KinectBridgeNode(Node):
         frame_id = 'camera_link'
 
         if rgb is not None:
-            # Publish raw image (for local use)
-            self.rgb_pub.publish(self._to_image(rgb, 'rgb8', stamp, frame_id))
-            
-            # Publish compressed image (for WiFi/Laptop use)
             try:
-                comp_msg = CompressedImage()
-                comp_msg.header.stamp = stamp
-                comp_msg.header.frame_id = frame_id
-                comp_msg.format = "jpeg"
-                # Encode RGB to JPEG (CV2 expects BGR for imencode)
-                bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
-                success, encoded_img = cv2.imencode(".jpg", bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
-                if success:
-                    comp_msg.data = encoded_img.tobytes()
-                    self.rgb_comp.publish(comp_msg)
-                    with self._lock:
-                        self._latest_jpeg = comp_msg.data
-                    
-                    # Heartbeat log every 100 frames (~3-5 seconds depending on FPS)
-                    if not hasattr(self, '_frame_count'): self._frame_count = 0
-                    self._frame_count += 1
-                    if self._frame_count % 100 == 0:
-                        self.get_logger().info('📡 Kinect Streaming: Heartbeat OK (100 frames processed)')
-                else:
-                    self.get_logger().error('❌ Kinect Error: JPEG encoding failed!')
-            except Exception as e:
-                self.get_logger().error(f'❌ Kinect Error: Compression failed: {e}')
+                # Publish raw image (for local use)
+                self.rgb_pub.publish(self._to_image(rgb, 'rgb8', stamp, 'camera_color_optical_frame'))
+                
+                # Publish compressed image (for WiFi/Laptop use)
+                try:
+                    comp_msg = CompressedImage()
+                    comp_msg.header.stamp = stamp
+                    comp_msg.header.frame_id = 'camera_color_optical_frame'
+                    comp_msg.format = "jpeg"
+                    # Encode RGB to JPEG (CV2 expects BGR for imencode)
+                    bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+                    success, encoded_img = cv2.imencode(".jpg", bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+                    if success:
+                        comp_msg.data = encoded_img.tobytes()
+                        self.rgb_comp.publish(comp_msg)
+                        with self._lock:
+                            self._latest_jpeg = comp_msg.data
+                        
+                        if not hasattr(self, '_frame_count'): self._frame_count = 0
+                        self._frame_count += 1
+                        if self._frame_count % 100 == 0:
+                            self.get_logger().info('📡 Kinect Streaming: Heartbeat OK (100 frames processed)')
+                    else:
+                        self.get_logger().error('❌ Kinect Error: JPEG encoding failed!')
+                except Exception as e:
+                    self.get_logger().error(f'❌ Kinect Error: Compression failed: {e}')
 
-            self.rgb_info.publish(self._camera_info(stamp, frame_id, RGB_FX, RGB_FY, RGB_CX, RGB_CY))
+                self.rgb_info.publish(self._camera_info(stamp, 'camera_color_optical_frame', RGB_FX, RGB_FY, RGB_CX, RGB_CY))
+            except Exception as e:
+                self.get_logger().error(f'❌ Kinect Error: RGB publication failed: {e}')
 
         if dep is not None:
-            self.depth_pub.publish(self._to_image(dep, '16UC1', stamp, frame_id))
-            self.depth_info.publish(self._camera_info(stamp, frame_id, DEPTH_FX, DEPTH_FY, DEPTH_CX, DEPTH_CY))
+            try:
+                self.depth_pub.publish(self._to_image(dep, '16UC1', stamp, 'camera_depth_optical_frame'))
+                self.depth_info.publish(self._camera_info(stamp, 'camera_depth_optical_frame', DEPTH_FX, DEPTH_FY, DEPTH_CX, DEPTH_CY))
+            except Exception as e:
+                self.get_logger().error(f'❌ Kinect Error: Depth publication failed: {e}')
 
     def _to_image(self, arr, encoding, stamp, frame_id):
         msg = Image()

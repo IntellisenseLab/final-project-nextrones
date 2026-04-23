@@ -142,15 +142,18 @@ class KobukiDriverNode(Node):
         self.get_logger().info('Kobuki driver ready with Odometry support.')
 
     def cmd_vel_cb(self, msg: Twist):
-        speed_mms, radius_mm = twist_to_speed_radius(msg.linear.x, msg.angular.z)
-        packet = make_base_control_payload(speed_mms, radius_mm)
-        self.get_logger().info(f'Received cmd_vel: lin={msg.linear.x:.2f}, ang={msg.angular.z:.2f} -> speed={speed_mms}, rad={radius_mm}')
-        if self.connected and self.serial:
-            try:
-                self.serial.write(packet)
-                self.get_logger().info('Sent packet to serial.')
-            except serial.SerialException as e:
-                self.get_logger().error(f'Serial write error: {e}')
+        try:
+            speed_mms, radius_mm = twist_to_speed_radius(msg.linear.x, msg.angular.z)
+            packet = make_base_control_payload(speed_mms, radius_mm)
+            self.get_logger().info(f'Received cmd_vel: lin={msg.linear.x:.2f}, ang={msg.angular.z:.2f} -> speed={speed_mms}, rad={radius_mm}')
+            if self.connected and self.serial:
+                try:
+                    self.serial.write(packet)
+                    self.get_logger().info('Sent packet to serial.')
+                except serial.SerialException as e:
+                    self.get_logger().error(f'❌ [Kobuki] Serial write error: {e}')
+        except Exception as e:
+            self.get_logger().error(f'❌ [Kobuki] Error processing velocity command: {e}')
 
     def _read_loop(self):
         """Read and parse feedback packets from Kobuki."""
@@ -247,28 +250,31 @@ class KobukiDriverNode(Node):
         self._publish_odom()
 
     def _publish_odom(self):
-        now = self.get_clock().now().to_msg()
-        q = quaternion_from_euler(0, 0, self.th)
+        try:
+            now = self.get_clock().now().to_msg()
+            q = quaternion_from_euler(0, 0, self.th)
 
-        # 1. Publish Odometry Message
-        odom = Odometry()
-        odom.header.stamp = now
-        odom.header.frame_id = 'odom'
-        odom.child_frame_id = 'base_link'
-        odom.pose.pose.position.x = self.x
-        odom.pose.pose.position.y = self.y
-        odom.pose.pose.orientation = q
-        self.odom_pub.publish(odom)
+            # 1. Publish Odometry Message
+            odom = Odometry()
+            odom.header.stamp = now
+            odom.header.frame_id = 'odom'
+            odom.child_frame_id = 'base_link'
+            odom.pose.pose.position.x = self.x
+            odom.pose.pose.position.y = self.y
+            odom.pose.pose.orientation = q
+            self.odom_pub.publish(odom)
 
-        # 2. Publish TF Transform
-        t = TransformStamped()
-        t.header.stamp = now
-        t.header.frame_id = 'odom'
-        t.child_frame_id = 'base_link'
-        t.transform.translation.x = self.x
-        t.transform.translation.y = self.y
-        t.transform.rotation = q
-        self.tf_broadcaster.sendTransform(t)
+            # 2. Publish TF Transform
+            t = TransformStamped()
+            t.header.stamp = now
+            t.header.frame_id = 'odom'
+            t.child_frame_id = 'base_link'
+            t.transform.translation.x = self.x
+            t.transform.translation.y = self.y
+            t.transform.rotation = q
+            self.tf_broadcaster.sendTransform(t)
+        except Exception as e:
+            self.get_logger().error(f'❌ [Kobuki] Failed to publish odom/TF: {e}')
 
     def destroy_node(self):
         self._stop_event.set()

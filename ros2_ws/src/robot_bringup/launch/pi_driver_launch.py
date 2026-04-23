@@ -11,6 +11,7 @@ def generate_launch_description():
     pkg_bringup = get_package_share_directory('robot_bringup')
     pkg_nav2_bringup = get_package_share_directory('nav2_bringup')
     pkg_rtabmap_launch = get_package_share_directory('rtabmap_launch')
+    pkg_slam_toolbox = get_package_share_directory('slam_toolbox')
 
     params_file = os.path.join(pkg_bringup, 'config', 'nav2_params.yaml')
 
@@ -50,26 +51,36 @@ def generate_launch_description():
             output='screen'
         ),
 
-        # 4. RTAB-Map SLAM (Optional - Heavy)
-        IncludeLaunchDescription(
-            PythonLaunchDescriptionSource([
-                os.path.join(pkg_rtabmap_launch, 'launch', 'rtabmap.launch.py')
-            ]),
-            condition=IfCondition(LaunchConfiguration('use_rtabmap')),
-            launch_arguments={
-                'use_sim_time': 'false',
-                'rgb_topic': '/camera/color/image_raw',
-                'depth_topic': '/camera/depth/image_raw',
-                'camera_info_topic': '/camera/color/camera_info',
-                'approx_sync': 'true',
-                'visual_odometry': 'true',
-                'rtabmap_viz': 'false',
-                'rtabmap_args': '--delete_db_on_start'
-            }.items()
-
+        # 4. Depth to Scan (For 2D SLAM)
+        Node(
+            package='depthimage_to_laserscan',
+            executable='depthimage_to_laserscan_node',
+            name='depthimage_to_laserscan',
+            remappings=[
+                ('image', '/camera/depth/image_raw'),
+                ('camera_info', '/camera/depth/camera_info'),
+                ('scan', '/scan')
+            ],
+            parameters=[{
+                'output_frame': 'camera_depth_optical_frame',
+                'range_min': 0.45,
+                'range_max': 5.0,
+                'scan_height': 10
+            }]
         ),
 
-        # 5. Nav2 Stack (Optional - Heavy)
+        # 5. SLAM Toolbox (Local 2D Mapping)
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource([
+                os.path.join(pkg_slam_toolbox, 'launch', 'online_async_launch.py')
+            ]),
+            launch_arguments={
+                'use_sim_time': 'false',
+                'params_file': os.path.join(pkg_bringup, 'config', 'mapper_params_online_async.yaml')
+            }.items()
+        ),
+
+        # 6. Nav2 Stack (Local)
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource([
                 os.path.join(pkg_nav2_bringup, 'launch', 'bringup_launch.py')
@@ -78,18 +89,19 @@ def generate_launch_description():
             launch_arguments={
                 'use_sim_time': 'false',
                 'params_file': params_file,
+                'map': '', # We use SLAM Toolbox as map provider
                 'autostart': 'true'
             }.items()
         ),
 
-        # 6. Semantic Pipeline (Brain - AI & Logic)
+        # 7. Semantic Pipeline (Local - Everything on Pi)
         Node(
             package='yolo_detection',
             executable='yolo_detection_node',
             name='yolo_node',
             parameters=[{
                 'model_path': '/home/yasiru/yolov8n.pt',
-                'debug_view': True
+                'debug_view': False # Disable window on Pi to save headless resources
             }]
         ),
         Node(
