@@ -2,7 +2,7 @@
   <Domain>
     <General>
       <Interfaces>
-        <NetworkInterface autodetermine="true" priority="default" multicast="false"/>
+        <NetworkInterface autodetermine="true" priority="default" multicast="true"/>
       </Interfaces>
     </General>
     <Discovery>
