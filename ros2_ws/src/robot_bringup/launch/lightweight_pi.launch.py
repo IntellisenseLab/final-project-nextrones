@@ -120,6 +120,7 @@ def generate_launch_description():
                 'use_sim_time': False,
                 'autostart': True,
                 'node_names': [
+                    'slam_toolbox',
                     'controller_server',
                     'planner_server',
                     'behavior_server',
