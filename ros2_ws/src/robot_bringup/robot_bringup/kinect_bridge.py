@@ -73,9 +73,9 @@ class KinectBridgeNode(Node):
         
         self.rgb_pub   = self.create_publisher(Image,           '/camera/color/image_raw',     qos)
         self.rgb_comp  = self.create_publisher(CompressedImage, '/camera/color/image_raw/compressed', qos_best_effort)
-        self.depth_pub = self.create_publisher(Image,           '/camera/depth/image_raw',      qos)
+        self.depth_pub = self.create_publisher(Image,           '/depth',             qos)
         self.rgb_info  = self.create_publisher(CameraInfo,      '/camera/color/camera_info',   qos)
-        self.depth_info= self.create_publisher(CameraInfo,      '/camera/depth/camera_info',   qos)
+        self.depth_info= self.create_publisher(CameraInfo,      '/depth_camera_info',   qos)
 
         self._lock     = threading.Lock()
         self._rgb_buf  = None

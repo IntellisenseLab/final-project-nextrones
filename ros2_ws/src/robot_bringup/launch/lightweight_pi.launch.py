@@ -75,13 +75,58 @@ def generate_launch_description():
             parameters=[os.path.join(pkg_bringup, 'config', 'mapper_params_online_async.yaml'), {'use_sim_time': False}],
             output='screen'
         ),
-        IncludeLaunchDescription(
-            PythonLaunchDescriptionSource([os.path.join(pkg_nav2, 'launch', 'navigation_launch.py')]),
-            launch_arguments={
-                'use_sim_time': 'false',
-                'params_file': os.path.join(pkg_bringup, 'config', 'navigation_params.yaml'),
-                'autostart': 'true',
-            }.items()
+        # 5. Nav2 Stack (individual nodes, NO collision_monitor)
+        Node(
+            package='nav2_controller',
+            executable='controller_server',
+            name='controller_server',
+            output='screen',
+            parameters=[os.path.join(pkg_bringup, 'config', 'navigation_params.yaml')]
+        ),
+        Node(
+            package='nav2_planner',
+            executable='planner_server',
+            name='planner_server',
+            output='screen',
+            parameters=[os.path.join(pkg_bringup, 'config', 'navigation_params.yaml')]
+        ),
+        Node(
+            package='nav2_behaviors',
+            executable='behavior_server',
+            name='behavior_server',
+            output='screen',
+            parameters=[os.path.join(pkg_bringup, 'config', 'navigation_params.yaml')]
+        ),
+        Node(
+            package='nav2_bt_navigator',
+            executable='bt_navigator',
+            name='bt_navigator',
+            output='screen',
+            parameters=[os.path.join(pkg_bringup, 'config', 'navigation_params.yaml')]
+        ),
+        Node(
+            package='nav2_waypoint_follower',
+            executable='waypoint_follower',
+            name='waypoint_follower',
+            output='screen',
+            parameters=[os.path.join(pkg_bringup, 'config', 'navigation_params.yaml')]
+        ),
+        Node(
+            package='nav2_lifecycle_manager',
+            executable='lifecycle_manager',
+            name='lifecycle_manager_navigation',
+            output='screen',
+            parameters=[{
+                'use_sim_time': False,
+                'autostart': True,
+                'node_names': [
+                    'controller_server',
+                    'planner_server',
+                    'behavior_server',
+                    'bt_navigator',
+                    'waypoint_follower'
+                ]
+            }]
         ),
 
         # 5. Zero-Stream Perception (Direct Script Execution)
