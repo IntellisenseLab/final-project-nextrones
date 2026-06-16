@@ -32,9 +32,11 @@ class YoloDetectionNode(Node):
                 Image, image_topic, self.image_callback, 10)
 
         self.publisher = self.create_publisher(DetectionArray, '/nextrones/detections', 10)
+        self.debug_publisher = self.create_publisher(Image, '/nextrones/debug_image', 10)
         self.bridge = CvBridge()
         
         self.ai_active = True
+        self.frame_counter = 0
         self.create_subscription(Bool, '/nextrones/ai_active', self.ai_state_callback, 10)
         
         self.get_logger().info('YOLO Detection Node Started')
@@ -47,12 +49,22 @@ class YoloDetectionNode(Node):
     def compressed_callback(self, msg):
         if not self.ai_active:
             return
+            
+        self.frame_counter += 1
+        if self.frame_counter % 6 != 0:
+            return
+            
         cv_image = self.bridge.compressed_imgmsg_to_cv2(msg, desired_encoding='bgr8')
         self._detect_and_publish(cv_image, msg.header)
 
     def image_callback(self, msg):
         if not self.ai_active:
             return
+            
+        self.frame_counter += 1
+        if self.frame_counter % 6 != 0:
+            return
+            
         cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
         self._detect_and_publish(cv_image, msg.header)
 
@@ -67,14 +79,28 @@ class YoloDetectionNode(Node):
                 detection = Detection()
                 detection.label = self.model.names[int(box.cls[0])]
                 detection.confidence = float(box.conf[0])
+                # Get bounding box corners
+                x1, y1, x2, y2 = map(int, box.xyxy[0])
+                
                 # Pixel coordinates of the center
-                x_center = int((box.xyxy[0][0] + box.xyxy[0][2]) / 2)
-                y_center = int((box.xyxy[0][1] + box.xyxy[0][3]) / 2)
+                x_center = int((x1 + x2) / 2)
+                y_center = int((y1 + y2) / 2)
                 detection.u = x_center
                 detection.v = y_center
                 detection_array.detections.append(detection)
+                
+                # Draw debug info
+                cv2.rectangle(cv_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                cv2.putText(cv_image, f"{detection.label} {detection.confidence:.2f}", 
+                            (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                cv2.circle(cv_image, (x_center, y_center), 5, (0, 0, 255), -1)
         
         self.publisher.publish(detection_array)
+        
+        # Publish debug image
+        debug_msg = self.bridge.cv2_to_imgmsg(cv_image, encoding='bgr8')
+        debug_msg.header = header
+        self.debug_publisher.publish(debug_msg)
 
 def main(args=None):
     rclpy.init(args=args)
