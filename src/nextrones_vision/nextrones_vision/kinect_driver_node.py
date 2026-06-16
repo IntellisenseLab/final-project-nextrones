@@ -97,12 +97,16 @@ class KinectDriverNode(Node):
                     self.get_logger().warn(
                         'Kinect returned no frame (device may be wedged — replug USB)',
                         throttle_duration_sec=3.0)
+                    import time
+                    time.sleep(0.1)
                     continue
                 rgb, _ = rgb
                 raw_depth, _ = raw_depth
             except Exception as exc:
                 self.get_logger().warn(
                     f'Kinect read error: {exc}', throttle_duration_sec=3.0)
+                import time
+                time.sleep(0.1)
                 continue
 
             self._publish(rgb, raw_depth)
