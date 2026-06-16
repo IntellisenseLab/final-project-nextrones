@@ -70,13 +70,27 @@ def generate_launch_description():
         # Camera RGB to Camera Depth
         stf('tf_camrgb_camdepth', ['0', '-0.025', '0', '0', '0', '0', 'camera_rgb_frame', 'camera_depth_frame']),
         stf('tf_camdepth_optical', ['0', '0', '0', '-1.5708', '0', '-1.5708', 'camera_depth_frame', 'camera_depth_optical_frame']),
-        # Dummy Map to Odom (since we removed RTAB-Map)
-        stf('tf_map_odom', ['0', '0', '0', '0', '0', '0', 'map', 'odom'])
     ]
 
-    # 4. RTAB-Map SLAM (REMOVED to save CPU for the bottle test)
-    # Nav2 uses this /map for the global costmap static layer, but we provide a dummy TF above.
-    # rtabmap = IncludeLaunchDescription(...)
+    # 4. RTAB-Map SLAM — builds map on the fly, publishes /map and map→odom TF
+    #    Nav2 uses this /map for the global costmap static layer
+    rtabmap = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(get_package_share_directory('rtabmap_launch'),
+                         'launch', 'rtabmap.launch.py')),
+        launch_arguments={
+            'rtabmap_args':      '--delete_db_on_start',
+            'rgb_topic':         '/camera/rgb/image_raw',
+            'depth_topic':       '/camera/depth/image_raw',
+            'camera_info_topic': '/camera/rgb/camera_info',
+            'frame_id':          'base_footprint',
+            'odom_topic':        '/odom',
+            'visual_odometry':   'false',   # CRITICAL: use Kobuki wheel odom, don't crash CPU
+            'approx_sync':       'true',
+            'database_path':     '/dev/shm/rtabmap/rtabmap.db',
+            'rtabmap_viz':       'false',  # no GUI on Pi
+        }.items()
+    )
 
     # 5. Nav2 navigation stack only (no AMCL/map_server — RTAB-Map provides localization+map)
     #    navigation_launch.py manages: controller, planner, bt_navigator, behaviors, etc.
@@ -149,7 +163,7 @@ def generate_launch_description():
     delayed_heavy = TimerAction(
         period=12.0,
         actions=[
-            # rtabmap, (Removed)
+            rtabmap,
             nav2,
             yolo_node,
             localization_node,
