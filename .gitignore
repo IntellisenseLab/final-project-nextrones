@@ -1,0 +1,8 @@
+build/
+install/
+log/
+__pycache__/
+*.pyc
+.vscode/
+yolov8n.pt
+yolov8n_ncnn_model/
