@@ -3,6 +3,7 @@ from rclpy.node import Node
 from rclpy.action import ActionClient
 from nav2_msgs.action import NavigateToPose
 from geometry_msgs.msg import PoseStamped
+from std_msgs.msg import Bool
 from nextrones_interfaces.msg import LocalizedObject, LocalizedObjectArray
 
 class NavGoalSenderNode(Node):
@@ -15,8 +16,18 @@ class NavGoalSenderNode(Node):
         self.action_client = ActionClient(self, NavigateToPose, 'navigate_to_pose')
         self.create_subscription(LocalizedObjectArray, '/nextrones/localized_objects', self.objects_callback, 10)
         
+        # AI Sleep Switch publisher and timer
+        self.ai_active_pub = self.create_publisher(Bool, '/nextrones/ai_active', 10)
+        self.ai_active = True
+        self.create_timer(1.0, self.publish_ai_state)
+        
         self.goal_sent = False
         self.get_logger().info(f'Nav Goal Sender Node Started. Looking for: {self.target_label}')
+
+    def publish_ai_state(self):
+        msg = Bool()
+        msg.data = self.ai_active
+        self.ai_active_pub.publish(msg)
 
     def objects_callback(self, msg):
         if self.goal_sent:
@@ -26,6 +37,8 @@ class NavGoalSenderNode(Node):
             if obj.label == self.target_label:
                 self.send_goal(obj.point)
                 self.goal_sent = True
+                self.ai_active = False  # Turn off YOLO to save CPU
+                self.get_logger().info('Target found! Sent sleep signal to YOLO/OpenCV.')
                 break
 
     def send_goal(self, point_stamped):

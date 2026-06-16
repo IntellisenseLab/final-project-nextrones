@@ -58,23 +58,25 @@ def generate_launch_description():
         output='screen',
     )
 
-    # 4. RTAB-Map SLAM — builds map on the fly, publishes /map and map→odom TF
-    #    Nav2 uses this /map for the global costmap static layer
-    rtabmap = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(get_package_share_directory('rtabmap_launch'),
-                         'launch', 'rtabmap.launch.py')),
-        launch_arguments={
-            'rtabmap_args':      '--delete_db_on_start',
-            'rgb_topic':         '/camera/rgb/image_raw',
-            'depth_topic':       '/camera/depth/image_raw',
-            'camera_info_topic': '/camera/rgb/camera_info',
-            'frame_id':          'base_link',
-            'approx_sync':       'true',
-            'database_path':     '/dev/shm/rtabmap/rtabmap.db',
-            'rtabmap_viz':       'false',  # no GUI on Pi
-        }.items()
-    )
+    # 3.5 Camera TF chain and Map->Odom dummy TF
+    def stf(name, args):
+        return Node(package='tf2_ros', executable='static_transform_publisher',
+                    name=name, arguments=args, output='screen')
+
+    cam_tf = [
+        # Base to Camera RGB
+        stf('tf_base_camrgb',   ['0.10', '0', '0.20', '0', '0', '0', 'base_link', 'camera_rgb_frame']),
+        stf('tf_camrgb_optical', ['0', '0', '0', '-1.5708', '0', '-1.5708', 'camera_rgb_frame', 'camera_rgb_optical_frame']),
+        # Camera RGB to Camera Depth
+        stf('tf_camrgb_camdepth', ['0', '-0.025', '0', '0', '0', '0', 'camera_rgb_frame', 'camera_depth_frame']),
+        stf('tf_camdepth_optical', ['0', '0', '0', '-1.5708', '0', '-1.5708', 'camera_depth_frame', 'camera_depth_optical_frame']),
+        # Dummy Map to Odom (since we removed RTAB-Map)
+        stf('tf_map_odom', ['0', '0', '0', '0', '0', '0', 'map', 'odom'])
+    ]
+
+    # 4. RTAB-Map SLAM (REMOVED to save CPU for the bottle test)
+    # Nav2 uses this /map for the global costmap static layer, but we provide a dummy TF above.
+    # rtabmap = IncludeLaunchDescription(...)
 
     # 5. Nav2 navigation stack only (no AMCL/map_server — RTAB-Map provides localization+map)
     #    navigation_launch.py manages: controller, planner, bt_navigator, behaviors, etc.
@@ -147,7 +149,7 @@ def generate_launch_description():
     delayed_heavy = TimerAction(
         period=12.0,
         actions=[
-            rtabmap,
+            # rtabmap, (Removed)
             nav2,
             yolo_node,
             localization_node,
@@ -162,6 +164,7 @@ def generate_launch_description():
         mkdir_shm,
         kobuki_base,
         kinect_driver,
+        *cam_tf,
         depth_to_scan,
         delayed_heavy,
     ])

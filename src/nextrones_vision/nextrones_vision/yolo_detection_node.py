@@ -2,6 +2,7 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image, CompressedImage
 from cv_bridge import CvBridge
+from std_msgs.msg import Bool
 from nextrones_interfaces.msg import Detection, DetectionArray
 from ultralytics import YOLO
 import cv2
@@ -32,13 +33,26 @@ class YoloDetectionNode(Node):
 
         self.publisher = self.create_publisher(DetectionArray, '/nextrones/detections', 10)
         self.bridge = CvBridge()
+        
+        self.ai_active = True
+        self.create_subscription(Bool, '/nextrones/ai_active', self.ai_state_callback, 10)
+        
         self.get_logger().info('YOLO Detection Node Started')
 
+    def ai_state_callback(self, msg):
+        if self.ai_active and not msg.data:
+            self.get_logger().info("AI SLEEP SIGNAL RECEIVED. Pausing heavy cv2/YOLO processing to save CPU.")
+        self.ai_active = msg.data
+
     def compressed_callback(self, msg):
+        if not self.ai_active:
+            return
         cv_image = self.bridge.compressed_imgmsg_to_cv2(msg, desired_encoding='bgr8')
         self._detect_and_publish(cv_image, msg.header)
 
     def image_callback(self, msg):
+        if not self.ai_active:
+            return
         cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
         self._detect_and_publish(cv_image, msg.header)
 
