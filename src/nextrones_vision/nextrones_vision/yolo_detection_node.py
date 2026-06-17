@@ -5,6 +5,7 @@ from cv_bridge import CvBridge
 from std_msgs.msg import Bool
 from nextrones_interfaces.msg import Detection, DetectionArray
 from ultralytics import YOLO
+from rclpy.qos import qos_profile_sensor_data
 import cv2
 
 class YoloDetectionNode(Node):
@@ -23,13 +24,17 @@ class YoloDetectionNode(Node):
         self.get_logger().info(f'Loading model: {model_path}')
         self.model = YOLO(model_path)
 
+        # BEST_EFFORT (sensor-data) QoS — RELIABLE image streaming stalls over a
+        # lossy WiFi link (e.g. iPhone hotspot). Matches the publisher and the
+        # `ros2 topic hz` tool, which receive fine over the same link.
         if use_compressed:
             self.subscription = self.create_subscription(
-                CompressedImage, image_topic, self.compressed_callback, 10)
+                CompressedImage, image_topic, self.compressed_callback,
+                qos_profile_sensor_data)
             self.get_logger().info(f'Subscribing to COMPRESSED images: {image_topic}')
         else:
             self.subscription = self.create_subscription(
-                Image, image_topic, self.image_callback, 10)
+                Image, image_topic, self.image_callback, qos_profile_sensor_data)
 
         self.publisher = self.create_publisher(DetectionArray, '/nextrones/detections', 10)
         self.debug_publisher = self.create_publisher(Image, '/nextrones/debug_image', 10)
@@ -105,9 +110,27 @@ class YoloDetectionNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = YoloDetectionNode()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+    
+    # Register custom SIGINT handler to override PyTorch/Ultralytics signal hooks
+    import signal
+    import sys
+    def sigint_handler(sig, frame):
+        node.get_logger().info('SIGINT received, shutting down yolo_detection_node...')
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
+        sys.exit(0)
+    
+    signal.signal(signal.SIGINT, sigint_handler)
+    
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 if __name__ == '__main__':
     main()

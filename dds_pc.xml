@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!-- PC-side Fast DDS profile: unicast discovery, peer = Pi (172.20.10.3).
+     Needed because the iPhone hotspot (172.20.10.x) blocks multicast,
+     which ROS 2 normally uses for discovery. -->
+<dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+  <profiles>
+    <participant profile_name="unicast_pc" is_default_profile="true">
+      <rtps>
+        <builtin>
+          <metatrafficUnicastLocatorList>
+            <locator><udpv4/></locator>
+          </metatrafficUnicastLocatorList>
+          <initialPeersList>
+            <!-- the OTHER machine: the Pi -->
+            <locator>
+              <udpv4><address>172.20.10.3</address></udpv4>
+            </locator>
+          </initialPeersList>
+        </builtin>
+      </rtps>
+    </participant>
+  </profiles>
+</dds>

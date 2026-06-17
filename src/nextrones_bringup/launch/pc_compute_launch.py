@@ -69,7 +69,10 @@ def generate_launch_description():
         executable='yolo_detection_node',
         name='yolo_detection_node',
         parameters=[{
-            'image_topic': '/camera/rgb/image_raw',
+            # Compressed stream + BEST_EFFORT QoS — raw RGB never streams reliably
+            # over WiFi (iPhone hotspot). Matches scripts/run_pc_yolo.sh.
+            'image_topic': '/camera/rgb/image_raw/compressed',
+            'use_compressed': True,
             'model': _find_yolo_model(),
         }],
         output='screen',
