@@ -1,0 +1,11 @@
+# ROS 2 auto-generated folders
+build/
+install/
+log/
+
+# Python cache files
+__pycache__/
+*.pyc
+
+# Large AI weight files
+*.pt
