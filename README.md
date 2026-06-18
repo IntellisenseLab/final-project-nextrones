@@ -1,7 +1,5 @@
 # Semantic Mapping and Navigation System (ROS 2)
 
-![Project Banner](https://via.placeholder.com/800x400?text=Insert+Robot+or+RViz+Screenshot+Here)
-
 An autonomous robotic system built on ROS 2 (Jazzy) that combines 2D AI object detection (YOLOv8) with 3D depth projection, SLAM mapping, and Nav2 autonomous driving. This project was developed as a final academic robotics project by the IntellisenseLab team.
 
 ## Features
