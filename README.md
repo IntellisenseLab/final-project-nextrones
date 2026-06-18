@@ -27,6 +27,11 @@ An autonomous robotic system built on ROS 2 (Jazzy) that combines 2D AI object d
 * `semantic_map`: Deduplicates 3D detections and drops markers into the global SLAM map.
 * `nav_goal_sender`: Interface for sending goal coordinates to the Nav2 stack.
 
+## 📋 Prerequisites
+* **OS:** Ubuntu 24.04 (Noble Numbat)
+* **ROS Version:** ROS 2 Jazzy Jalisco
+* **Python:** 3.10+
+
 ## How to Build & Install
 
 ```bash
@@ -55,6 +60,12 @@ To bring up the entire robot, hardware, mapping, and AI pipeline:
 ros2 launch robot_bringup pi_driver_launch.py
 ```
 *(Note: Ensure your `yolov8n.pt` weights file is located at the path defined in your launch parameters).*
+
+**Custom Launch Arguments:**
+You can tell the robot to search for different objects dynamically by passing the `target_object` argument:
+```bash
+ros2 launch robot_bringup pi_driver_launch.py target_object:='chair'
+```
 
 ## Team Members
 * **Yasiru Bandara**
