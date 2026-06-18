@@ -68,7 +68,7 @@ ros2 launch robot_bringup pi_driver_launch.py target_object:='chair'
 ```
 
 ## ⚠️ Known Issues & Troubleshooting
-* **Nav2 Goal Rejections:** If the robot spins in place or Nav2 rejects the goal, it is likely because the target object is placed too close to a wall (inside the SLAM obstacle costmap radius). Try moving the target into open space.
+* **Nav2 Goal Rejections:** If the robot spins in place or Nav2 rejects the goal, it is likely because the target object is placed too close to a wall (inside the 0.25m SLAM obstacle costmap radius). Try moving the target into open space.
 * **Kinect Depth Dropout:** The depth sensor uses IR and will fail to detect distances for transparent objects (e.g., glass bottles) or highly reflective surfaces, resulting in goal generation errors.
 * **Coordinate Frame Mismatch:** Ensure TF2 is correctly broadcasting the `base_to_camera` joint. If the robot drives backward towards a goal, the optical frame (Z-forward) was not properly rotated to the base frame (X-forward).
 
