@@ -6,13 +6,12 @@ An autonomous robotic system built on ROS 2 (Jazzy) that combines 2D AI object d
 - **Semantic Mapping:** Integrates YOLOv8 object detection with a physical map to give the robot a spatial "memory" of objects.
 - **Hardware Agnostic AI:** Processes raw RGB-D data from a Microsoft Kinect and projects 2D pixels into a 3D global coordinate frame using TF2.
 - **Autonomous Navigation:** Utilizes Nav2 and SLAM Toolbox to map unknown environments and navigate to specific semantic goals.
-- **Optimized for Edge Compute:** Built to run heavy inference workloads across distributed systems (Raspberry Pi + Laptop Brain).
+- **Optimized for Edge Compute:** Built to run the entire heavy inference workload, mapping, and navigation strictly on a single Raspberry Pi.
 
 ## Hardware Architecture
 * **Base:** Kobuki (Turtlebot 2)
 * **Vision:** Microsoft Kinect (RGB-D)
-* **Compute Node 1:** Raspberry Pi (Hardware Drivers & Bringup)
-* **Compute Node 2:** Master Laptop (AI Inference, Mapping, Navigation)
+* **Compute Brain:** Raspberry Pi (Runs the entire stack: Drivers, AI Inference, SLAM Toolbox, and Navigation)
 
 ## Package Structure
 The workspace consists of several custom ROS 2 packages:
