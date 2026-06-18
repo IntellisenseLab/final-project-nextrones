@@ -33,11 +33,15 @@ cd final-project-nextrones
 # 2. Install Python Dependencies
 pip install -r requirements.txt
 
-# 3. Source ROS 2 Jazzy and Build
+# 3. Download YOLOv8 Weights
+# This downloads the required AI model directly to the root of your workspace
+wget https://github.com/ultralytics/assets/releases/download/v8.2.0/yolov8n.pt
+
+# 4. Source ROS 2 Jazzy and Build
 source /opt/ros/jazzy/setup.bash
 colcon build --symlink-install
 
-# 4. Source the custom workspace
+# 5. Source the custom workspace
 source install/setup.bash
 ```
 
