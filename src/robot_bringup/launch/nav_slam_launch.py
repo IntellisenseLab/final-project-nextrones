@@ -90,7 +90,7 @@ def generate_launch_description():
             executable='yolo_detection_node',
             name='yolo_detection_node',
             parameters=[{
-                'model_path': '/home/yasiru/yolov8n.pt',
+                'model_path': 'yolov8n.pt',
                 'inference_interval': 1.8,
                 'debug_view': False
             }]

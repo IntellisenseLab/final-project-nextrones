@@ -36,7 +36,7 @@ def generate_launch_description():
         package='yolo_detection',
         executable='yolo_detection_node',
         name='yolo_detection_node',
-        parameters=[{'model_path': '/home/hasini/yolov8n.pt', 'debug_view': False}]
+        parameters=[{'model_path': 'yolov8n.pt', 'debug_view': False}]
     )
 
     localization_node = Node(

@@ -1,7 +1,7 @@
 #!/bin/bash
 # 1. Source the global ROS 2 and workspace environments
 source /opt/ros/jazzy/setup.bash
-source /home/yasiru/ros2_ws/install/setup.bash
+source install/setup.bash
 
 # 2. Tell ROS 2 to use the local loopback if needed or the specific IP
 export ROS_IP=$(hostname -I | awk '{print $1}')

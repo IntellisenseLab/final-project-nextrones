@@ -27,7 +27,7 @@ def generate_launch_description():
             package='robot_bringup',
             executable='/usr/bin/bash',
             name='kinect_bridge',
-            arguments=['-c', 'source /opt/ros/jazzy/setup.bash && source /home/yasiru/ros2_ws/install/setup.bash && python3 /home/yasiru/ros2_ws/src/robot_bringup/robot_bringup/kinect_bridge.py'],
+            arguments=['-c', 'source /opt/ros/jazzy/setup.bash && source install/setup.bash && python3 src/robot_bringup/robot_bringup/kinect_bridge.py'],
             output='screen'
         ),
 
@@ -37,7 +37,7 @@ def generate_launch_description():
             executable='yolo_detection_node',
             name='yolo_node',
             parameters=[{
-                'model_path': '/home/yasiru/yolov8n.pt',
+                'model_path': 'yolov8n.pt',
                 'target_object': LaunchConfiguration('target_object'),
                 'debug_view': False
             }]

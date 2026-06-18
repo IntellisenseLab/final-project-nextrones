@@ -26,7 +26,7 @@ class YoloDetectionNode(Node):
         self.bridge = CvBridge()
         
         # Parameters
-        self.declare_parameter('model_path', '/home/hasini/yolov8n.pt')
+        self.declare_parameter('model_path', 'yolov8n.pt')
         self.declare_parameter('debug_view', True)
         self.declare_parameter('inference_interval', 0.6)
 
