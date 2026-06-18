@@ -8,6 +8,12 @@ An autonomous robotic system built on ROS 2 (Jazzy) that combines 2D AI object d
 - **Autonomous Navigation:** Utilizes Nav2 and SLAM Toolbox to map unknown environments and navigate to specific semantic goals.
 - **Optimized for Edge Compute:** Built to run the entire heavy inference workload, mapping, and navigation strictly on a single Raspberry Pi.
 
+## How it Works (The Pipeline)
+1. **Perception (YOLOv8):** The robot subscribes to the Kinect RGB camera and runs a lightweight YOLOv8 Nano model to identify objects (e.g., bottles, chairs) and find their exact 2D pixel center.
+2. **3D Localization:** Using the Kinect's depth sensor, the system extracts the physical distance of that specific pixel. ROS 2 TF (Transform) then mathematically projects that coordinate from the camera's lens into the global SLAM floorplan.
+3. **Semantic Mapping:** The system filters out duplicate detections (e.g., if two bottles are within 0.5m of each other) and saves the unique 3D coordinates into a live, spatial database.
+4. **Autonomous Navigation:** When a target is selected, the ROS 2 Nav2 stack automatically calculates an obstacle-free path across the SLAM Occupancy Grid and sends velocity commands to the Kobuki wheels to reach the object.
+
 ## Hardware Architecture
 * **Base:** Kobuki (Turtlebot 2)
 * **Vision:** Microsoft Kinect (RGB-D)
